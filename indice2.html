@@ -1,1 +1,849 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Foliador y Estampador de PDF</title>
+  <!-- PDF.js para renderizar páginas en Canvas -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <!-- pdf-lib para modificar el PDF cliente-side -->
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <!-- fontkit para incrustar fuentes TTF custom -->
+  <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js"></script>
+  
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f4f6f9;
+      margin: 0;
+      padding: 0;
+      color: #333;
+    }
 
+    /* BANNER ENCABEZADO ESTILO ELECTRO PUNO S.A.A. */
+    .app-header {
+      background-color: #0052b4;
+      color: #ffffff;
+      padding: 14px 30px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .app-header h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+    .app-header .header-separator {
+      font-weight: 300;
+      opacity: 0.7;
+      font-size: 20px;
+    }
+    .app-header .header-subtitle {
+      font-size: 16px;
+      font-weight: 400;
+      opacity: 0.9;
+    }
+
+    .main-wrapper {
+      padding: 20px;
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #0052b4;
+      border-bottom: 2px solid #3182ce;
+      padding-bottom: 8px;
+    }
+    .container {
+      display: flex;
+      flex-direction: row;
+      gap: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .panel {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .controls {
+      flex: 1;
+      max-width: 420px;
+    }
+    .preview-panel {
+      flex: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .form-group {
+      margin-bottom: 15px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 5px;
+      font-size: 14px;
+      color: #2d3748;
+    }
+    input[type="file"], input[type="number"], input[type="text"], select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    input:disabled {
+      background-color: #edf2f7;
+      cursor: not-allowed;
+    }
+    .inline-group {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    .inline-group > div {
+      flex: 1;
+    }
+    button.btn-primary {
+      width: 100%;
+      background-color: #0052b4;
+      color: white;
+      border: none;
+      padding: 12px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 10px;
+    }
+    button.btn-primary:hover {
+      background-color: #003e8a;
+    }
+    button.btn-primary:disabled {
+      background-color: #a0aec0;
+      cursor: not-allowed;
+    }
+
+    /* BARRA SUPERIOR DE HERRAMIENTAS EN LA VISTA PREVIA */
+    .preview-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      background: #edf2f7;
+      padding: 6px 12px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      border: 1px solid #e2e8f0;
+    }
+    .btn-reset {
+      background-color: #e53e3e;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-reset:hover {
+      background-color: #c53030;
+    }
+
+    /* CONTENEDOR DE LA VISTA PREVIA */
+    #canvas-container {
+      position: relative;
+      border: 2px dashed #cbd5e0;
+      background-color: #ffffff;
+      margin-top: 5px;
+      overflow: hidden;
+      max-width: 100%;
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+    }
+
+    /* CAPA DE RETÍCULA SUPERPUESTA PARA VISIBILIDAD PERMANENTE SOBRE EL CANVAS */
+    #canvas-container.show-grid::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+      z-index: 5;
+      background-image: 
+        linear-gradient(to right, rgba(0, 82, 180, 0.35) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 82, 180, 0.35) 1px, transparent 1px),
+        linear-gradient(to right, rgba(0, 82, 180, 0.12) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 82, 180, 0.12) 1px, transparent 1px);
+      background-size: 50px 50px, 50px 50px, 10px 10px, 10px 10px;
+    }
+
+    #pdf-canvas {
+      display: block;
+    }
+
+    /* Elementos movibles en la vista previa */
+    .draggable-element {
+      position: absolute;
+      border: 2px dashed #3182ce;
+      background: rgba(49, 130, 206, 0.25);
+      cursor: move;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      z-index: 10;
+    }
+    .draggable-element img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+    }
+    .draggable-text {
+      position: absolute;
+      border: 2px dashed #e53e3e;
+      background: rgba(229, 62, 62, 0.25);
+      color: #000;
+      cursor: move;
+      user-select: none;
+      white-space: nowrap;
+      padding: 2px 4px;
+      z-index: 10;
+    }
+    
+    /* EFECTO VISUAL DE NEGRITA PRONUNCIADA */
+    .draggable-text.is-bold {
+      font-weight: 900 !important;
+      -webkit-text-stroke: 0.6px currentColor;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #edf2f7;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #4a5568;
+      margin-top: 4px;
+    }
+    .info-note {
+      font-size: 12px;
+      color: #718096;
+      margin-top: 2px;
+    }
+    .variation-box {
+      background: #ebf8ff;
+      border: 1px solid #bee3f8;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-top: 5px;
+    }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 0;
+      color: #0052b4;
+      font-size: 13px;
+    }
+    .checkbox-label input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+    .style-options {
+      display: flex;
+      gap: 15px;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ENCABEZADO ESTILO ELECTRO PUNO S.A.A. -->
+  <header class="app-header">
+    <h1>ELECTRO PUNO S.A.A.</h1>
+    <span class="header-separator">|</span>
+    <span class="header-subtitle">Módulo de Foliado y Estampado Digital</span>
+  </header>
+
+  <div class="main-wrapper">
+    <div class="container">
+      <!-- PANEL DE CONTROLES -->
+      <div class="panel controls">
+        <h2>Configuración de Foliado</h2>
+
+        <!-- 1. Archivo PDF -->
+        <div class="form-group">
+          <label for="pdf-input">1. Seleccionar Documento PDF:</label>
+          <input type="file" id="pdf-input" accept="application/pdf">
+        </div>
+
+        <!-- 2. Imagen del Sello (OPCIONAL) -->
+        <div class="form-group">
+          <label for="stamp-input">2. Seleccionar Imagen del Sello (Opcional):</label>
+          <input type="file" id="stamp-input" accept="image/png, image/jpeg">
+          <div class="inline-group" style="margin-top: 8px;">
+            <div>
+              <label>Ancho (px):</label>
+              <input type="number" id="stamp-width" value="120" min="20" max="500">
+            </div>
+            <div>
+              <label>Alto (px):</label>
+              <input type="number" id="stamp-height" value="120" min="20" max="500">
+            </div>
+          </div>
+        </div>
+
+        <!-- OPCIÓN DE VARIACIÓN MANUAL / NATURAL -->
+        <div class="form-group variation-box">
+          <label class="checkbox-label">
+            <input type="checkbox" id="vary-position-check">
+            Variar ubicación y ángulo (Efecto sellado manual)
+          </label>
+          <p class="info-note" style="margin-top: 5px;">
+            Simula el sellado manual aplicando pequeñas variaciones aleatorias de rotación (-4° a +4°) y leves desplazamientos en cada hoja.
+          </p>
+        </div>
+
+        <!-- 3. Numeración Correlativa e Inversa -->
+        <div class="form-group">
+          <div class="inline-group">
+            <div>
+              <label for="start-num">3. Número Inicial:</label>
+              <input type="number" id="start-num" value="15000">
+            </div>
+            <div style="padding-bottom: 8px;">
+              <label class="checkbox-label" style="font-size: 13px; color: #2d3748;">
+                <input type="checkbox" id="reverse-foliation-check">
+                Foliar a la inversa
+              </label>
+            </div>
+          </div>
+
+          <div class="inline-group" style="margin-top: 8px;">
+            <div>
+              <label>Ceros a la izquierda:</label>
+              <input type="number" id="num-digits" value="6" min="1" max="10">
+            </div>
+            <div>
+              <label>Prefijo:</label>
+              <input type="text" id="num-prefix" value="N° ">
+            </div>
+          </div>
+        </div>
+
+        <!-- Fuentes y Estilo -->
+        <div class="form-group">
+          <label for="font-family">Fuente Tipográfica:</label>
+          <select id="font-family">
+            <option value="Times-Roman">Times New Roman (Serif)</option>
+            <option value="Helvetica">Helvetica / Arial (Sans-Serif)</option>
+            <option value="Courier">Courier (Mecanografía)</option>
+            <option value="CUSTOM">Cargar archivo de fuente personal (.ttf)</option>
+          </select>
+          <div id="custom-font-container" style="display: none; margin-top: 8px;">
+            <label for="custom-font-file">Archivo de fuente (.ttf):</label>
+            <input type="file" id="custom-font-file" accept=".ttf">
+            <p class="info-note">Puedes cargar una fuente estilo Bodoni o Didot en formato .ttf</p>
+          </div>
+        </div>
+
+        <!-- Estilos de Texto: Negrita y Subrayado -->
+        <div class="form-group">
+          <label>Estilo de Texto:</label>
+          <div class="style-options">
+            <label class="checkbox-label" style="font-size: 13px; color: #333;">
+              <input type="checkbox" id="font-bold-check" checked>
+              <b>Negrita (Bold)</b>
+            </label>
+            <label class="checkbox-label" style="font-size: 13px; color: #333;">
+              <input type="checkbox" id="font-underline-check">
+              <u>Subrayado</u>
+            </label>
+          </div>
+        </div>
+
+        <div class="inline-group form-group">
+          <div>
+            <label for="font-size">Tamaño de Fuente:</label>
+            <input type="number" id="font-size" value="14" min="6" max="72">
+          </div>
+          <div>
+            <label for="font-color">Color:</label>
+            <input type="color" id="font-color" value="#000000" style="height: 38px; padding: 2px;">
+          </div>
+        </div>
+
+        <!-- Posiciones -->
+        <div class="form-group">
+          <span class="badge">Tip: Arrastra el sello y la numeración en la vista previa para posicionarlos.</span>
+        </div>
+
+        <!-- Botón Procesar -->
+        <button id="process-btn" class="btn-primary" disabled>Generar y Descargar PDF</button>
+      </div>
+
+      <!-- PANEL DE VISTA PREVIA -->
+      <div class="panel preview-panel">
+        <h2>Vista Previa y Posicionamiento</h2>
+
+        <!-- BARRA SUPERIOR CON HERRAMIENTAS DE VISUALIZACIÓN -->
+        <div class="preview-toolbar">
+          <label class="checkbox-label">
+            <input type="checkbox" id="toggle-grid-check" checked>
+            Mostrar líneas guía
+          </label>
+          <button id="reset-btn" class="btn-reset">Limpiar Todo</button>
+        </div>
+
+        <div id="canvas-container" class="show-grid">
+          <canvas id="pdf-canvas"></canvas>
+          
+          <!-- Elemento de vista previa para el Sello -->
+          <div id="drag-stamp" class="draggable-element" style="display: none; top: 50px; left: 50px;">
+            <img id="stamp-preview-img" src="" alt="Sello">
+          </div>
+
+          <!-- Elemento de vista previa para la Numeración -->
+          <div id="drag-text" class="draggable-text" style="display: none; top: 180px; left: 50px;">
+            <span id="text-preview-val">N° 015000</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+    // Referencias DOM
+    const pdfInput = document.getElementById('pdf-input');
+    const stampInput = document.getElementById('stamp-input');
+    const stampWidthInput = document.getElementById('stamp-width');
+    const stampHeightInput = document.getElementById('stamp-height');
+    const varyPositionCheck = document.getElementById('vary-position-check');
+    const toggleGridCheck = document.getElementById('toggle-grid-check');
+    const resetBtn = document.getElementById('reset-btn');
+    const startNumInput = document.getElementById('start-num');
+    const reverseFoliationCheck = document.getElementById('reverse-foliation-check');
+    const numDigitsInput = document.getElementById('num-digits');
+    const numPrefixInput = document.getElementById('num-prefix');
+    const fontFamilySelect = document.getElementById('font-family');
+    const customFontContainer = document.getElementById('custom-font-container');
+    const customFontFileInput = document.getElementById('custom-font-file');
+    const fontBoldCheck = document.getElementById('font-bold-check');
+    const fontUnderlineCheck = document.getElementById('font-underline-check');
+    const fontSizeInput = document.getElementById('font-size');
+    const fontColorInput = document.getElementById('font-color');
+    const processBtn = document.getElementById('process-btn');
+
+    const canvas = document.getElementById('pdf-canvas');
+    const ctx = canvas.getContext('2d');
+    const canvasContainer = document.getElementById('canvas-container');
+    const dragStamp = document.getElementById('drag-stamp');
+    const stampPreviewImg = document.getElementById('stamp-preview-img');
+    const dragText = document.getElementById('drag-text');
+    const textPreviewVal = document.getElementById('text-preview-val');
+
+    // Estado global
+    let pdfBytes = null;
+    let stampImageBytes = null;
+    let stampImageType = null;
+    let pdfDocPdfJs = null;
+    let totalPdfPages = 0;
+    let renderScale = 1;
+    let pdfPageWidth = 0;
+    let pdfPageHeight = 0;
+    let customFontBuffer = null;
+
+    let stampPos = { x: 50, y: 50, w: 120, h: 120 };
+    let textPos = { x: 50, y: 180 };
+
+    // Conmutar cuadrícula guía
+    toggleGridCheck.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        canvasContainer.classList.add('show-grid');
+      } else {
+        canvasContainer.classList.remove('show-grid');
+      }
+    });
+
+    // Función Limpiar Todo
+    resetBtn.addEventListener('click', () => {
+      pdfInput.value = '';
+      stampInput.value = '';
+      customFontFileInput.value = '';
+      
+      pdfBytes = null;
+      stampImageBytes = null;
+      stampImageType = null;
+      pdfDocPdfJs = null;
+      totalPdfPages = 0;
+      customFontBuffer = null;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.width = 0;
+      canvas.height = 0;
+
+      dragStamp.style.display = 'none';
+      dragText.style.display = 'none';
+      stampPreviewImg.src = '';
+      
+      dragStamp.style.top = '50px';
+      dragStamp.style.left = '50px';
+      dragText.style.top = '180px';
+      dragText.style.left = '50px';
+      
+      stampPos = { x: 50, y: 50, w: 120, h: 120 };
+      textPos = { x: 50, y: 180 };
+
+      reverseFoliationCheck.checked = false;
+      startNumInput.disabled = false;
+
+      processBtn.disabled = true;
+    });
+
+    // Manejador del checkbox de foliado inverso
+    reverseFoliationCheck.addEventListener('change', (e) => {
+      const isReverse = e.target.checked;
+      startNumInput.disabled = isReverse;
+      updateTextPreview();
+    });
+
+    // Cargar PDF para vista previa
+    pdfInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      pdfBytes = await file.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+      pdfDocPdfJs = await loadingTask.promise;
+      totalPdfPages = pdfDocPdfJs.numPages;
+
+      const page = await pdfDocPdfJs.getPage(1);
+      const viewport = page.getViewport({ scale: 1.0 });
+
+      pdfPageWidth = viewport.width;
+      pdfPageHeight = viewport.height;
+
+      const maxWidth = 650;
+      renderScale = maxWidth / viewport.width;
+      const scaledViewport = page.getViewport({ scale: renderScale });
+
+      canvas.width = scaledViewport.width;
+      canvas.height = scaledViewport.height;
+
+      const renderContext = {
+        canvasContext: ctx,
+        viewport: scaledViewport
+      };
+      await page.render(renderContext).promise;
+
+      updateTextPreview();
+      dragText.style.display = 'block';
+      
+      checkEnableProcess();
+    });
+
+    // Cargar Sello (Opcional)
+    stampInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) {
+        stampImageBytes = null;
+        stampImageType = null;
+        dragStamp.style.display = 'none';
+        return;
+      }
+
+      stampImageType = file.type === 'image/png' ? 'png' : 'jpg';
+      stampImageBytes = await file.arrayBuffer();
+
+      const blob = new Blob([stampImageBytes], { type: file.type });
+      stampPreviewImg.src = URL.createObjectURL(blob);
+
+      dragStamp.style.display = 'flex';
+      updateStampDimensions();
+
+      checkEnableProcess();
+    });
+
+    stampWidthInput.addEventListener('input', updateStampDimensions);
+    stampHeightInput.addEventListener('input', updateStampDimensions);
+
+    function updateStampDimensions() {
+      const w = parseInt(stampWidthInput.value) || 120;
+      const h = parseInt(stampHeightInput.value) || 120;
+      stampPos.w = w * renderScale;
+      stampPos.h = h * renderScale;
+
+      dragStamp.style.width = stampPos.w + 'px';
+      dragStamp.style.height = stampPos.h + 'px';
+    }
+
+    startNumInput.addEventListener('input', updateTextPreview);
+    numDigitsInput.addEventListener('input', updateTextPreview);
+    numPrefixInput.addEventListener('input', updateTextPreview);
+    fontSizeInput.addEventListener('input', updateTextPreview);
+    fontColorInput.addEventListener('input', updateTextPreview);
+    fontBoldCheck.addEventListener('change', updateTextPreview);
+    fontUnderlineCheck.addEventListener('change', updateTextPreview);
+
+    function updateTextPreview() {
+      let previewNum = 1;
+      const isReverse = reverseFoliationCheck.checked;
+
+      if (isReverse) {
+        // En la vista previa (página 1), se muestra el total de páginas si hay PDF cargado, o 100 por defecto
+        previewNum = totalPdfPages > 0 ? totalPdfPages : 100;
+      } else {
+        previewNum = parseInt(startNumInput.value) || 0;
+      }
+
+      const digits = parseInt(numDigitsInput.value) || 6;
+      const prefix = numPrefixInput.value || '';
+      const formattedNum = prefix + String(previewNum).padStart(digits, '0');
+
+      textPreviewVal.textContent = formattedNum;
+      dragText.style.fontSize = (parseInt(fontSizeInput.value) * renderScale) + 'px';
+      dragText.style.color = fontColorInput.value;
+
+      if (fontBoldCheck.checked) {
+        dragText.classList.add('is-bold');
+      } else {
+        dragText.classList.remove('is-bold');
+      }
+
+      dragText.style.textDecoration = fontUnderlineCheck.checked ? 'underline' : 'none';
+    }
+
+    fontFamilySelect.addEventListener('change', (e) => {
+      if (e.target.value === 'CUSTOM') {
+        customFontContainer.style.display = 'block';
+      } else {
+        customFontContainer.style.display = 'none';
+      }
+    });
+
+    customFontFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        customFontBuffer = await file.arrayBuffer();
+      }
+    });
+
+    makeDraggable(dragStamp, (x, y) => {
+      stampPos.x = x;
+      stampPos.y = y;
+    });
+
+    makeDraggable(dragText, (x, y) => {
+      textPos.x = x;
+      textPos.y = y;
+    });
+
+    function makeDraggable(element, onMove) {
+      let isDragging = false;
+      let startX, startY, initialLeft, initialTop;
+
+      element.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        initialLeft = element.offsetLeft;
+        initialTop = element.offsetTop;
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        let newLeft = initialLeft + dx;
+        let newTop = initialTop + dy;
+
+        newLeft = Math.max(0, Math.min(newLeft, canvas.width - element.offsetWidth));
+        newTop = Math.max(0, Math.min(newTop, canvas.height - element.offsetHeight));
+
+        element.style.left = newLeft + 'px';
+        element.style.top = newTop + 'px';
+
+        onMove(newLeft, newTop);
+      });
+
+      window.addEventListener('mouseup', () => {
+        isDragging = false;
+      });
+    }
+
+    function checkEnableProcess() {
+      if (pdfBytes) {
+        processBtn.disabled = false;
+      }
+    }
+
+    function hexToRgb(hex) {
+      const r = parseInt(hex.slice(1, 3), 16) / 255;
+      const g = parseInt(hex.slice(3, 5), 16) / 255;
+      const b = parseInt(hex.slice(5, 7), 16) / 255;
+      return PDFLib.rgb(r, g, b);
+    }
+
+    processBtn.addEventListener('click', async () => {
+      processBtn.disabled = true;
+      processBtn.textContent = 'Procesando páginas...';
+
+      try {
+        const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+        pdfDoc.registerFontkit(fontkit);
+
+        let embeddedStamp = null;
+        if (stampImageBytes) {
+          if (stampImageType === 'png') {
+            embeddedStamp = await pdfDoc.embedPng(stampImageBytes);
+          } else {
+            embeddedStamp = await pdfDoc.embedJpg(stampImageBytes);
+          }
+        }
+
+        let embeddedFont = null;
+        const selectedFont = fontFamilySelect.value;
+        const isBold = fontBoldCheck.checked;
+
+        if (selectedFont === 'CUSTOM' && customFontBuffer) {
+          embeddedFont = await pdfDoc.embedFont(customFontBuffer);
+        } else if (selectedFont === 'Helvetica') {
+          embeddedFont = await pdfDoc.embedFont(
+            isBold ? PDFLib.StandardFonts.HelveticaBold : PDFLib.StandardFonts.Helvetica
+          );
+        } else if (selectedFont === 'Courier') {
+          embeddedFont = await pdfDoc.embedFont(
+            isBold ? PDFLib.StandardFonts.CourierBold : PDFLib.StandardFonts.Courier
+          );
+        } else {
+          embeddedFont = await pdfDoc.embedFont(
+            isBold ? PDFLib.StandardFonts.TimesRomanBold : PDFLib.StandardFonts.TimesRoman
+          );
+        }
+
+        const pages = pdfDoc.getPages();
+        const totalPagesCount = pages.length;
+        const isReverse = reverseFoliationCheck.checked;
+        const startNum = parseInt(startNumInput.value) || 0;
+        const digits = parseInt(numDigitsInput.value) || 6;
+        const prefix = numPrefixInput.value || '';
+        const fontSize = parseInt(fontSizeInput.value) || 14;
+        const colorRgb = hexToRgb(fontColorInput.value);
+        const shouldVary = varyPositionCheck.checked;
+        const isUnderline = fontUnderlineCheck.checked;
+
+        const baseStampW = (parseInt(stampWidthInput.value) || 120);
+        const baseStampH = (parseInt(stampHeightInput.value) || 120);
+        const baseStampX = stampPos.x / renderScale;
+        const baseStampY = pdfPageHeight - (stampPos.y / renderScale) - baseStampH;
+
+        const baseTextX = textPos.x / renderScale;
+        const baseTextY = pdfPageHeight - (textPos.y / renderScale) - fontSize;
+
+        for (let i = 0; i < totalPagesCount; i++) {
+          const page = pages[i];
+
+          // 1. Estampar Sello (Si existe)
+          if (embeddedStamp) {
+            let currentStampX = baseStampX;
+            let currentStampY = baseStampY;
+            let currentRotate = PDFLib.degrees(0);
+
+            if (shouldVary) {
+              const randomAngle = (Math.random() * 8 - 4); 
+              currentRotate = PDFLib.degrees(randomAngle);
+
+              const shiftX = Math.random() * 8; 
+              const shiftY = -(Math.random() * 8); 
+
+              currentStampX += shiftX;
+              currentStampY += shiftY;
+
+              page.drawImage(embeddedStamp, {
+                x: currentStampX,
+                y: currentStampY,
+                width: baseStampW,
+                height: baseStampH,
+                rotate: currentRotate,
+              });
+            } else {
+              page.drawImage(embeddedStamp, {
+                x: baseStampX,
+                y: baseStampY,
+                width: baseStampW,
+                height: baseStampH
+              });
+            }
+          }
+
+          // 2. Lógica del Foliado Inverso:
+          // Hoja 1 (i = 0) = totalPagesCount (ej. 100)
+          // Hoja final (i = N - 1) = 1
+          let currentNum = 0;
+          if (isReverse) {
+            currentNum = totalPagesCount - i;
+          } else {
+            currentNum = startNum + i;
+          }
+
+          const formattedNum = prefix + String(currentNum).padStart(digits, '0');
+
+          page.drawText(formattedNum, {
+            x: baseTextX,
+            y: baseTextY,
+            size: fontSize,
+            font: embeddedFont,
+            color: colorRgb
+          });
+
+          // 3. Subrayado
+          if (isUnderline) {
+            const textWidth = embeddedFont.widthOfTextAtSize(formattedNum, fontSize);
+            const lineY = baseTextY - 2;
+            page.drawLine({
+              start: { x: baseTextX, y: lineY },
+              end: { x: baseTextX + textWidth, y: lineY },
+              thickness: Math.max(1, fontSize / 14),
+              color: colorRgb,
+            });
+          }
+        }
+
+        const modifiedPdfBytes = await pdfDoc.save();
+        const blob = new Blob([modifiedPdfBytes], { type: 'application/pdf' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'Documento_Foliado.pdf';
+        link.click();
+
+        alert('¡PDF generado y descargado exitosamente!');
+      } catch (err) {
+        console.error(err);
+        alert('Ocurrió un error al procesar el archivo PDF: ' + err.message);
+      } finally {
+        processBtn.disabled = false;
+        processBtn.textContent = 'Generar y Descargar PDF';
+      }
+    });
+  </script>
+</body>
+</html>
